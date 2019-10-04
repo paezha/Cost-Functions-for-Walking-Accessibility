@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.20 (MiKTeX 2.9.7000 64-bit) (preloaded format=pdflatex 2019.4.5)  4 OCT 2019 16:37
+This is pdfTeX, Version 3.14159265-2.6-1.40.20 (MiKTeX 2.9.7000 64-bit) (preloaded format=pdflatex 2019.4.5)  4 OCT 2019 17:29
 entering extended mode
 **./Cost-Functions-for-Walking-Accessibility.tex
 (Cost-Functions-for-Walking-Accessibility.tex
@@ -1065,12 +1065,12 @@ l.929
        <./Cost-Functions-for-Walking-Accessibility_files/figure-latex/figure-ac
 cessibility-cumulative-opportunities-kenya-1.pdf>] [21] [22] [23] [24] [25] [26
 ] [27] [28]
-Package atveryend Info: Empty hook `BeforeClearDocument' on input line 1517.
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 1516.
 [29]
-Package atveryend Info: Empty hook `AfterLastShipout' on input line 1517.
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 1516.
 (Cost-Functions-for-Walking-Accessibility.aux)
-Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 1517.
-Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 1517.
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 1516.
+Package atveryend Info: Executing hook `AtEndAfterFileList' on input line 1516.
 
 Package rerunfilecheck Info: File `Cost-Functions-for-Walking-Accessibility.out
 ' has not changed.
@@ -1078,7 +1078,7 @@ Package rerunfilecheck Info: File `Cost-Functions-for-Walking-Accessibility.out
 
 LaTeX Warning: There were multiply-defined labels.
 
-Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 1517.
+Package atveryend Info: Empty hook `AtVeryVeryEnd' on input line 1516.
  ) 
 Here is how much of TeX's memory you used:
  14470 strings out of 492945
@@ -1112,7 +1112,7 @@ blic/lm/lmsy7.pfb><C:/Users/Antonio/AppData/Local/Programs/MiKTeX 2.9/fonts/typ
 e1/public/lm/lmtt10.pfb><C:/Users/Antonio/AppData/Local/Programs/MiKTeX 2.9/fon
 ts/type1/public/lm/lmtt8.pfb>
 Output written on Cost-Functions-for-Walking-Accessibility.pdf (29 pages, 73544
-388 bytes).
+093 bytes).
 PDF statistics:
  570 PDF objects out of 1000 (max. 8388607)
  162 named destinations out of 1000 (max. 500000)
