@@ -1,0 +1,48 @@
+---
+title: Comparing distance, time, and metabolic energy cost functions for walking accessibility in infrastructure-poor regions
+author:
+  - name: Antonio Páez
+    email: paezha@mcmaster.ca
+    affiliation: School of Geography and Earth Sciences
+    footnote: Corresponding Author
+  - name: Zoha Anjum
+    email: anjumz2@mcmaster.ca 
+    affiliation: Department Health Research Methods Evidence and Impact
+  - name: Sarah E. Dickson-Anderson
+    email: sdickso@mcmaster.ca
+    affiliation: Department of Civil Engineering
+  - name: Corinne J. Schuster-Wallace
+    email: cschuster.wallace@usask.ca
+    affiliation: Geography and Planning
+  - name: Belén Martín Ramos
+    email: belen.martin@upm.es
+    affiliation: Universidad Politécnica de Madrid
+  - name: Christopher D. Higgins
+    email: cd.higgins@utoronto.ca
+    affiliation: University of Toronto Scarborough
+address:
+  - code: School of Geography and Earth Sciences
+    address: School of Geography and Earth Sciences, McMaster University, 1280 Main St W, Hamilton, ON, L8S 4K1 Canada
+  - code: Department Health Research Methods Evidence and Impact
+    address: Department Health Research Methods Evidence and Impact, McMaster University, 1280 Main St W, Hamilton, ON, L8S 4K1 Canada
+  - code: Department of Civil Engineering
+    address: Dept. of Civil Engineering, McMaster University, 1280 Main St W, Hamilton, ON, L8S 4K1 Canada
+  - code: Geography and Planning
+    address: Dept. of Geography and Planning, University of Saskatchewan, Room 265 Arts, 9 Campus Drive, Saskatoon, SK, S7N 5A5 Canada
+  - code: Universidad Politécnica de Madrid
+    address: Transport Research Centre (TRANSyT-UPM), Universidad Politécnica de Madrid, ETSI de Caminos, Canales y Puertos, Calle Profesor Aranguren s/n, 28040 Madrid, Spain
+  - code: University of Toronto Scarborough
+    address: Department of Human Geography, Room HL512 1265 Military Trail Toronto, ON, M1C 1A4 Canada
+abstract: |
+  Accessibility is a widely used concept in transportation planning and research. However a majority of the literature is concerned with accessibility in infrastructure-rich regions where it is used to assess the output of infrastructure. Relatively scant attention in contrast has been paid to the topic of accessibility in infrastructure-poor regions. These are regions characterized by non-homogeneous landscapes with limited or no transportation infrastructure. Even studies that deal with infrastructure-poor regions tend to transpose the methods used elsewhere. This practice seems inappropriate when mobility happens by active rather than motorized modes since the effort required for movement is likely different. The objective of this paper is to compare distance, time, and metabolic energy cost functions in walking accessibility. To this end, we present a case study of accessibility to water in central Kenya. The results indicate that Euclidean distance, surface distance, and travel time correlate better between them than any of them does with metabolic energy. Furthermore, while shortest paths tend to be symmetric for distance and time criteria, under consideration of metabolic energy expenditure pathways change significantly depending on the direction of movement. This has implications for measuring accessibility and equity. By providing alternate mechanisms for valuing the cost of movement, this research suggests avenues to consider vulnerable populations, such as pregnant women who require greater nutritional intake and expend more energy per unit activity. Directions for further research include certain trade-offs between route choice variables across various applications, for example, walking and cycling route choice algorithms.
+
+journal: "Journal of Transport Geography"
+date: "`r Sys.Date()`"
+bibliography: mybibfile.bib
+output: rticles::elsevier_article
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{longtable}
+#  - \usepackage{float} # Uncomment to float figures to end of document
+#  - \usepackage[nomarkers,figuresonly]{endfloat} # Uncomment to float figures to end of document
+---

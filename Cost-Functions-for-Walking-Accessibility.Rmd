@@ -1,0 +1,1374 @@
+---
+title: Comparing distance, time, and metabolic energy cost functions for walking accessibility in infrastructure-poor regions
+author:
+  - name: Author
+    email: someone@someaddress.edu
+    affiliation: Academic Unit
+    footnote: Corresponding Author
+address:
+  - code: Academic Unit
+    address: Somewhere
+abstract: |
+  Accessibility is a widely used concept in transportation planning and research. However a majority of the literature is concerned with accessibility in infrastructure-rich regions where it is used to assess the output of infrastructure. Relatively scant attention in contrast has been paid to the topic of accessibility in infrastructure-poor regions. These are regions characterized by non-homogeneous landscapes with limited or no transportation infrastructure. Even studies that deal with infrastructure-poor regions tend to transpose the methods used elsewhere. This practice seems inappropriate when mobility happens by active rather than motorized modes since the effort required for movement is likely different. The objective of this paper is to compare distance, time, and metabolic energy cost functions in walking accessibility. To this end, we present a case study of accessibility to water in central Kenya. The results indicate that Euclidean distance, surface distance, and travel time correlate better between them than any of them does with metabolic energy. Furthermore, while shortest paths tend to be symmetric for distance and time criteria, under consideration of metabolic energy expenditure pathways change significantly depending on the direction of movement. This has implications for measuring accessibility and equity. By providing alternate mechanisms for valuing the cost of movement, this research suggests avenues to consider vulnerable populations, such as pregnant women who require greater nutritional intake and expend more energy per unit activity. Directions for further research include certain trade-offs between route choice variables across various applications, for example, walking and cycling route choice algorithms.
+
+journal: "Journal of Transport Geography"
+date: "`r Sys.Date()`"
+bibliography: mybibfile.bib
+output: rticles::elsevier_article
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{longtable}
+#  - \usepackage{float} # Uncomment to float figures to end of document
+#  - \usepackage[nomarkers,figuresonly]{endfloat} # Uncomment to float figures to end of document
+---
+
+```{r load-packages, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(ggthemes)
+library(gridExtra)
+library(raster)
+library(gdistance)
+library(spdep)
+library(plot3D)
+library(kableExtra)
+```
+
+```{r load-data, include=FALSE}
+#Load data for empirical example. This file includes the source data using a false origin to preserve confidentiality. The file includes the following objects:
+# 1. A `SpatialPoints` object called `Destinations.sp` with the coordinates of water sources
+# 2. A Digital Elevation Model raster called `elevation.r`
+# 3. A `SpatialPoints` object called `Origins.sp` with the coordinates of the households or bomas
+# 4. A `SpatialPolygons` object called `Populated_Area.sp` with the approximate boundaries of the populated parts in the study area
+load("Data_for_Empirical_Example.RData")
+
+# Load precalculated cost matrices for empirical example. See chunk cost-matrices-empirical for calculation details or to recalculate.
+load("Cost_Matrices_for_Empirical_Example.RData")
+
+# Load precalculated shortest paths for empirical example. See chunk equivalent-costs-calculations-kenya for calculation details or to recalculate.
+load("Shortest_Paths_Empirical.RData")
+
+# Join dataframes of equivalent cost for convenience for plotting
+dist_equivalent <- rename(dist_equivalent, 
+                          distance_d = distance, 
+                          surf_distance_d = surf_distance,
+                          time_d = time, 
+                          energy_d = energy)
+
+time_equivalent <- rename(time_equivalent, 
+                          distance_t = distance, 
+                          surf_distance_t = surf_distance,
+                          time_t = time, 
+                          energy_t = energy)
+
+energy_equivalent <- rename(energy_equivalent, 
+                          distance_e = distance, 
+                          surf_distance_e = surf_distance,
+                          time_e = time, 
+                          energy_e = energy)
+
+equivalent <- data.frame(dist_equivalent, time_equivalent, energy_equivalent)
+```
+
+Keywords: accessibility; walking; cost functions; Tobler's hiking function; distance; travel time; metabolic energy; water; Kenya; infrastructure-poor regions; 
+
+1 Introduction
+============
+
+Accessibility is a widely used concept in transportation planning and research as well as many allied disciplines. Operationally, accessibility has traditionally been estimated as a function of the availability of opportunities, and the cost of reaching said opportunities by using specific transport modes [@Bocarejo2012]. According to Geurs and van Wee [-@Geurs2009], accessibility is "the extent to which land use and transport systems enable (groups of) individuals to reach activities or destinations by means of a (combination of) transport mode(s)". Travel resistance or impedance is central in the implementation of accessibility approaches, measured as the cost of travel often in terms of distance, time, money, or generalized measures of cost [@Ortega2014]. A vast and rich literature exists for motorized accessibility in infrastructure-rich regions, where accessibility is often a tool used to assess the output of infrastructure [@Lopez2008], as exemplified by studies on the effects of the Trans-European transport network [@Gutierrez1996; @Vickerman1999accessibility], high speed rail [@Ortega2012; @Ortega2014], and major road projects [@Linneker1992accessibility; @Hou2011transport; @Gutierrez1999impact]. 
+
+More recently, there has also been growing interest in accessibility through non-motorized travel, or active transportation [e.g., @Arranz2019measuring; @iacono2010; @vale2015]. The reasons for this are variegated. Active travel is seen as a reasonable solution to environmental, urban, and health issues [@Rabl2012benefits; @Saelensminde2004cost]. Much of the research on accessibility by active modes has tended to import the kind of criteria used in the analysis of motorized modes, namely travel distance and travel time (although not cost, since active modes are frequently free). There are reasons to believe that these cost criteria are not necessarily the most appropriate when examining accessibility by active modes, and there is a small but growing literature that examines in particular the metabolic cost of movement and how it influences trip length and accessibility [e.g., @Jobe2009new; @Hsu2014energy; @Iseki2014approach; @Macias2016alternative].
+
+The objective of this paper is to contribute to this body of research by comparing several cost criteria in the calculation of accessibility measures for walking. In particular, we compare straight line distance, surface distance, travel time, and metabolic energy as alternative cost criteria. Our examination of these cost functions is motivated by the analysis of accessibility in an infrastructure-poor region. These regions are typically characterized by non-homogeneous landscapes with limited or no transportation infrastructure where walking is likely a dominant mode of travel [@Matous2013]. Accordingly, we present a case study of accessibility to water in a rural region in Kenya. 
+
+The case study illustrates some key aspects of measuring walking accessibility using different criteria. The results indicate that Euclidean distance, surface distance, and travel time correlate well, with uni-direction distances remaining similar. However, hysteresis is observed in surface distance and travel time routes when return paths are included. Furthermore, consideration of metabolic energy expenditure changes pathways significantly. This has implications for measuring accessibility and equity. By providing alternate mechanisms for valuing the cost of movement, it becomes possible to consider vulnerable populations, such as pregnant women who require greater nutritional intake and expend more energy per unit activity [@Pommells2018gender]. Directions for further research include certain trade-offs between route choice variables across various applications, for example, walking and cycling route choice algorithms.
+
+2 Background
+============
+
+As a matter of practice, accessibility is often calculated in terms of straight-line distances between origins and destinations. This practice is due to the ease of calculating Euclidean distances, and is sometimes justified by the high correlation exhibited between straight-line distance and network distance [@Apparicio2008]. This approach has been used in European countries with dense infrastructure, for example in the study of catchment areas for public transport facilities [e.g., @Gutierrez2008], but also to study access to basic health services in low-resource settings in Africa [e.g., @Dangisso2015; @Macharia2017accessibility]. Nonetheless, network distance is more realistic, and superior to straight-line distance, especially outside of network-dense regions [see @Apparicio2008, p. 9]. 
+
+Similarly, in infrastructure-poor regions it is tempting to assume that straight-line distance is a suitable approximation for the cost of movement. However, Ho et al. [-@Ho2014] compared straight-line distance to distance on paths (i.e., a network) as inferred from satellite data and self-reported travel time and found that although straight-line distance and distance on paths were highly correlated, straight-line distance systematically underestimated the distance along paths. Furthermore, self-reported travel time correlated only poorly with straight-line distance. Underestimation of path distance by use of straight-line distance in this case is problematic because the effect is to artificially inflate accessibility by making things appear closer or more reachable than they are. This issue is perhaps more serious for walking trips given the steeper space-cost trade-offs of this mode compared to motorized modes [see @Basu2014value; @Whalen2013mode].
+
+Although path distances appear to offer a more accurate representation of travel behaviour in both infrastructure-rich and infrastructure-poor regions, a key difference between these travel contexts is the way in which they facilitate or impede movement. In this sense, infrastructure-rich landscapes tend, by design, to restrict movement to specialized pieces of hardware (e.g., roads, streets, avenues, highways) and to otherwise limit movement by the very presence of other infrastructure (e.g., buildings). For this reason, infrastructure-rich landscapes tend to function as formal networks. In contrast, infrastructure-poor regions lack many of these restrictions, and movement tends to be constrained instead by features of the landscape that render some routes impossible (e.g., cliffs) or difficult (e.g., slopes). Consequently, these landscapes tend to operate more as informal networks [e.g., inferred networks in @Ho2014] or grids. Consequently, infrastructure-rich environments are designed to facilitate mobility along prespecified routes, whereas infrastructure-poor environments may present fewer restrictions in terms of routes, but potentially more obstacles to mobility.
+
+Within this context, walking is a fundamental transport mode and the availability of motorized modes or public transport are often limited [@Matous2013]. For example, in parts of sub-Saharan African a lack of formal network infrastructure means these regions are inaccessible or accessible only with difficulty by motorized transport, even if motorized transportation was affordable, which highlights the importance of active accessibility [@Porter2002]. In this sense, there is evidence showing that Kenyan children living in rural areas are more likely to use non-motorized travel modes such as walking and cycling than their urban counterparts [@ojiambo2012; @Larouche2014]. The burden faced by females in  sub-Saharan Africa is also notable, since this is a region where women act as porters of water and other products perhaps beginning early in adolescence [@Porter2002; @Sorenson2011safe; @Geere2018water]. 
+
+Where street or road networks are mostly absent, the cost of reaching destinations can be significantly influenced by the relief of the terrain and the direction of movement, in addition to other factors such as the quality of the surface or the land cover. The path selected may not be the same when walking to a destination as on the return journey due to the differences in efforts expended going up-slope versus down-slope. This is referred to as anisotropic movement [@Ebener2005]. Wood et al. [-@Wood2018] studied the sensitivity in distance calculation to variations in three travel-time modeling approaches, taking as reference a model that accounted for variations in land cover and directionality in slope (anisotropy). They found that an approach based on measuring Euclidean distances on a flat surface underestimated the distance traveled, relative to the reference. The second approach, which calculated the distances constrained to a road network, also varied substantially from the reference, underestimating it in some areas and overestimating in others. Finally, the third approach, which accounted for land cover and elevation but ignored the directionality of slopes slightly underestimated travel times.
+
+Along the same line of reasoning, the World Health Organization (WHO) developed the GIS-based tool AccessMod [@AccessMod] to model physical accessibility to healthcare. This tool computes travel time taking into account different speeds associated with land uses and modes of transportation. In particular, it corrects walking speed depending on the steepness of the slope and direction of movement. This tool has been applied in several studies examining accessibility to specific health services in low-infrastructure regions, including Namibia [@Alegana2012], Rwanda [@Aoun2015], Tanzania [@Chen2017], and Kenya [@Macharia2017].
+
+The above-mentioned accessibility studies (that do not assume terrain planarity) account for land uses, barriers, and anisotropic variations of walking speeds, and are based on the calculation of distances along least-cost paths. Least-cost modeling is a common raster technique for analyzing movements from an origin cell to the surrounding cells across a continuous surface [@Adriaensen2003]. By considering surface distances or introducing corrections to walking speeds depending on the slope and direction of travel, the distance or time friction associated with travel on continuous and complex landscapes can be modeled. Even though these studies are located in low-infrastructure regions, it is assumed that travel always occurs along optimum simulated paths that minimize total travelling time or distance [@Ray2008]. 
+
+This use of distance or travel time as key costs to be optimized is an assumption that is common in the literature on accessibility in infrastructure-rich regions. For example, Iacono et al. [-@iacono2010] explored the issues related to the development of accessibility measures for non-motorized modes using time and distance as impedance variables in active accessibility calculations. Additionally, In their review of published research that measures active accessibility, Vale et al. [-@vale2015] concluded that slope should always be included in accessibility of bicycling and that it is also important for walking, however it is largely absent from the walking accessibility measures.However, the greater availability of elevation data and advances in research in other disciplines offer opportunities to better understand the behavior of individuals when traveling in poor-infrastructure contexts and challenge assumptions surrounding the most important costs to be minimized. Jobe and White [-@Jobe2009new], for example, proposed a least-cost model of energetic expenditure for walking access to locations in a National Park. They posit that energetic expenditure is a better measure of the true physiological cost associated with hiking than velocity. The caloric cost of pedestrian travel across three dimensional terrains has also been used widely in archaeology and in anthropology [@Wood2006; @Mlekuz2014]. Pedestrian efficiency in terms of energy consumption has so far been barely considered from a European and North American perspective, let alone from the perspective of low and middle income countries. In this sense, it is reasonable to question the validity of the assumption that travelers wish to minimize distance or time in infrastructure-poor regions, and if they do not, what are the implications for accessibility analysis. To illustrate these issues, we use an empirical example of access to water and examine changes in accessibility associated with different travel cost criteria.
+
+3 Methods
+============
+
+While travel on formal networks can be modeled using linear features, modeling accessibility in infrastructure-poor contexts requires travel costs to be estimated over a landscape. Methodologically, this involves the conversion of a landscape to a network graph, conceptualizing nodal relations and graph conductance, and how these combine to permit the calculation of least-cost paths.
+
+# 3.1 Grids as graphs
+
+Landscapes are often represented in digital form by means of _rasters_ or _grids_. These are tessellations composed of regular _cells_ or _pixels_ arrayed in rows and columns. The cells are typically used to store information about the landscape, such as elevation in Digital Elevation Models (DEMs)/Digital Terrain Models (DTMs), temperature, and land cover. One approach to identify shortest paths in grids is to convert the grid into a graph. This is the approach adopted by van Etten [-@vanEtten2017] in the `R` `gdistance` package; other packages, such as ArcMAP 10.3  [@ESRI2016path], implement similar algorithms. These algorithms convert a grid into a graph by extracting the centroids of the cells to generate a set of _nodes_, which are then connected via _edges_ or _links_ according to some prespecified neighborhood criterion. 
+
+Examples of this process are shown in Figure \ref{fig:figure-grid-as-graph}. A starting grid is shown in the top panel of the figure. The middle panel shows the graph that is obtained from converting each cell centroid into a node connected to its orthogonal neighbors (using the so-called Rook criterion). The bottom panel shows the grid  as a graph with each node connected to its orthogonal and diagonal neighbors (using the so-called Queen criterion). Other less common neighborhood criteria include Bishop (only the diagonal neighbors are connected) and Knight (16 neighbors).
+
+This transformation from grid to graph has a key advantage in terms of the ability to store information. Whereas a grid can store information about the attributes of the landscape at the position of the cells, a graph can store the same information in the nodes, and can additionally store _relational_ information in the links, that is information about how two linked nodes relate to each other. Simple examples of relational information include the geographical distance on the plane between nodes, or difference in elevations, as discussed below.
+
+```{r figure-grid-as-graph, fig.height=7, echo=FALSE, cache=TRUE, fig.cap="\\label{fig:figure-grid-as-graph}Converting a grid into graphs using the Rook and Queen criteria"}
+# Parameters for figure
+par(mfrow = c(3, 1), mar = c(2, 2, 2, 2))
+
+landscape.r <- raster(nrow = 10, ncol = 10)
+
+# Crop and plot a 10-by-10 segment of the landscape raster as polygons
+r2poly <- landscape.r %>%
+  rasterToPolygons(n=4)
+plot(r2poly)
+
+title(main = "Grid")
+
+# Find ROOK neighbors for the same 10-by-10 segment of the landscape raster and plot
+r2nb_r <- poly2nb(pl = r2poly, queen = FALSE)
+plot(r2poly, border = "gray")
+plot(r2nb_r, coordinates(r2poly), col = "red", add = TRUE)
+
+title(main = "Grid as a graph: Rook criterion")
+
+# Find QUEEN neighbors for the same 10-by-10 segment of the landscape raster and plot
+r2nb_q <- poly2nb(pl = r2poly, queen = TRUE)
+plot(r2poly, border = "gray")
+plot(r2nb_q, coordinates(r2poly), col = "red", add = TRUE)
+
+title(main = "Grid as a graph: Queen criterion")
+```
+
+# 3.2 Resistance/cost as relational information in a graph
+
+Relational information in a graph concerns an attribute that is specific to a node pair $i-j$. This information can be directed, meaning that the relation between $i-j$ can differ from the relation between $j-i$. Of particular relevance for the present discussion is the fact that links in a network can store information pertaining to transitions between nodes. Accordingly, a key item of relational information is the _resistance_ or _cost_ to transition between nodes in the graph. Resistance is a property of a link that measures friction to movement: the higher the resistance between two nodes, the more difficult it is to transition between them.
+
+There are different ways of defining resistance. When a DEM is available, two physical aspects of the landscape that relate to resistance can be obtained directly from the grid, namely the vertical displacement and the horizontal displacement between nodes $i$ and $j$. The friction to movement is greater as the vertical and/or horizontal displacements increase ($\Delta v$ and $\Delta h$ respectively). Put differently, it becomes more expensive to transition from $i$ to $j$ as the distance between them in the horizontal and/or vertical direction increases.
+
+On a flat, homogeneous plain, the horizontal distance is a reasonable measure of cost. Perhaps the simplest measure of resistance is the Euclidean distance between two arbitrary (and possibly non-contiguous) nodes $i$ and $k$. This distance can be calculated by means of the Pythagorean theorem for small regions. Alternatively, for large regions, the great circle distance can be used, to account for the curvature of the Earth. These measures of distance do not require calculations on a raster, only the coordinates of the two nodes. On the other hand, when the landscape is not flat and/or is non-homogeneous, the horizontal distance becomes suspect as a measure of resistance. In this case, we might be interested in measuring resistance in other ways, for instance by considering the distance on the surface, the time that it takes to travel between nodes as a function of speed, or the energy needed to move between the nodes.
+
+The distance on the surface of a landscape is a somewhat more sophisticated measure of resistance. Given a function $y=f(x)$ that describes a transect on the surface of a landscape, the length $\mathcal{L}$ of the segment of the line representing the distance on the surface between points $i$ and $j$ is given by:
+
+\begin{equation} \label{eq:1}\mathcal{L} = \int_{i}^{j}{\sqrt{1 + \frac{dy}{dx}^2}}dx\end{equation}
+
+\noindent where $x$ is the horizontal coordinate on the transect and $y$ is the elevation.
+
+A grid is essentially a discrete representation of the landscape, and therefore the length of the segment of a transect would instead be calculated for $n$ line sub-segments between locations $i$ and $j$ as follows:
+
+\begin{equation} \label{eq:2}L = \sum_{i}^{n}{d_i} = \sum_{i}^{n}{\sqrt{\Delta v_{ij}^2 + \Delta h_{ij}^2}}\end{equation}
+
+Given vertical displacement $\Delta v$ and the horizontal displacement $\Delta h$, we can approximate the distance on the surface $L$, as the sum of segmental distances $d_i$. The approximation is only limited by the resolution of the grid: higher resolutions with small cells allow for better approximations of the distance on the surface of the landscape.
+
+Another feature of the landscape that can be calculated from the vertical and horizontal displacements is the slope $m$. The instantaneous slope is given by the derivative of $y = f(x)$ with respect to $x$. In the case of a grid, this is given by the following expression:
+
+\begin{equation} \label{eq:3}m = \frac{\Delta v}{\Delta h}\end{equation}
+
+The slope is not typically used as a measure of resistance; however, it is an intermediate attribute that is linked to speed via Tobler's formula for hiking travel [@Tobler1993three]:
+
+\begin{equation} \label{eq:4}s = 100e^{(-3.5|m + 0.05|)}\end{equation}
+
+\noindent where the speed $s$ is in $m/min$. To obtain a measure of resistance, the hiking speed in turn can be converted into travel time in minutes if we divide the distance by speed as follows:
+
+\begin{equation} \label{eq:5}t = \frac{d_i}{100e^{-3.5|m + 0.05|}} = \frac{1}{100}d_i \cdot e^{3.5|m + 0.05|}\end{equation}
+
+\noindent where $d_i$ can be the distance on the surface as discussed above, or can be approximated by the horizontal distance $\Delta h$ [see @vanEtten2017, pp. 13-16]. Other speed formulas, including backpacker equations, are discussed by @Doherty2014analysis and @Herzog2010theory.
+
+The slope is also linked to the energy required to move. Minetti et al. [-@Minetti2002] investigated the metabolic energy cost of human movement on extreme slopes. This work updated and extended earlier work on the energy cost of walking on level surfaces [e.g., @Marcaria1938sulla; @Bobbert1960energy] by examining a wider range of slope and speed values. Minetti and colleagues present an equation that relates the metabolic energy cost of walking to slope, as follows:
+
+\begin{equation} \label{eq:6}C_w = 280.5m^5 - 58.7m^4 - 76.8m^3 + 51.9m^2 + 19.6m + 2.5\end{equation}
+
+\noindent where $m$ is the slope and $C_w$ ($J\cdot kg^{-1}\cdot m^{-1}$) is the energy cost of moving one unit of mass a horizontal distance equivalent to one unit of vertical displacement. Notice that due to the polynomial formulation, this equation is valid for a range of slopes approximately between $-0.5$ and $0.5$, outside of which the behavior of the function becomes counterintuitive. 
+
+Surface distance can be rewritten as a function of slope as follows:
+
+\begin{equation} \label{eq:7}d = \sqrt{1 + m^2}\end{equation}
+
+The three resistance functions above (Equations \ref{eq:5}, \ref{eq:6}, and \ref{eq:7}) can be expressed in similar terms. As seen in Figure \ref{fig:figure-resistance-functions}, resistance tends to increase as the slope increases. Surface distance and travel time are symmetric, although travel time is shifted to the left, to reflect somewhat shorter travel times (equivalently higher speeds) when the slope is moderately negative (reflective of movement along a gentle downward slope). The metabolic energy cost, in contrast, is not symmetric, and is further shifted to the left. This is because the metabolic cost of moving up a slope tends to be much higher than the cost of moving down a slope.
+
+```{r figure-resistance-functions, fig.width=4, fig.height=6, echo=FALSE, cache=TRUE, fig.cap="\\label{fig:figure-resistance-functions}Various types of resistance as a function of slope (plots of equations 2, 5, and 6)"}
+
+# Surface distance
+fun.1 <- function(x) sqrt(1 + x^2)
+
+d.plot <- ggplot(data = data.frame(x = 0), mapping = aes(x = x)) +
+  stat_function(fun = fun.1) +
+  xlab("Slope") +
+  ylab("Surface Distance [m/m]") +
+  xlim(-0.4, 0.4) + 
+  theme_tufte()
+
+# Travel time
+fun.2 <- function(x) exp(3.5 * abs(x + 0.05))/100
+
+t.plot <- ggplot(data = data.frame(x = 0), mapping = aes(x = x)) +
+  stat_function(fun = fun.2) +
+  xlab("Slope") +
+  ylab("Travel Time [min/m]") +
+  xlim(-0.4, 0.4) + 
+  theme_tufte()
+
+fun.3 <- function(x) 280.5 * x^5 - 58.7 * x^4 - 76.8 * x^3 + 51.9 * x^2 + 19.6 * x + 2.5
+
+cw.plot <- ggplot(data = data.frame(x = 0), mapping = aes(x = x)) +
+  stat_function(fun = fun.3) +
+  xlab("Slope") +
+  ylab("Metabolic Energy [J/(kg m)]") +
+  xlim(-0.4, 0.4) + 
+  theme_tufte()
+
+grid.arrange(d.plot, t.plot, cw.plot, ncol = 1)
+```
+
+# 3.3 Conductance
+
+Resistance is an intuitive way of thinking about the way the landscape tends to impose a cost to movement. When resistance is used it becomes necessary to impose some constraint to avoid "jumps" across the landscape, that is, non-continuous movement between cells that are not neighbors on the grid. In practice, this entails setting the resistance of non-contiguous pairs of nodes to a very large value (e.g., +Inf). Computationally, this has the disadvantage of requiring dense matrices to be stored, since every value must be explicitly retained [@vanEtten2017, p. 3]. A more efficient approach involves working with the _conductance_, which is simply defined as the inverse of the resistance. Consequently, relational information for non-contiguous nodes can be set to zero. This allows the use of sparse matrix techniques, whereby only non-zero values are explicitly stored and zero values are ignored. The `gdistance` package, for example, works internally with the conductance. This means that instead of using, e.g., travel time for its calculations, it uses the inverse of time (or temporal rate), even if it reports the resistance (i.e., the time).
+
+# 3.4 Shortest paths, cost, and accessibility indicators
+
+Given a graph and resistance/conductance information, shortest paths and costs can be found using a conventional algorithm, such as Djikstra [e.g., @Cherkassky1996].
+
+Once the shortest paths have been obtained, accessibility can be calculated based on the associated costs. A general formulation of accessibility is as follows [see @Paez2012positive]:
+
+\begin{equation} \label{eq:8}A_i = \sum_{j\in D}g(W_j)f(c_{ij})\end{equation}
+
+\noindent where $i$ is a point of origin and $j$ corresponds to a destination in the set of locations $D$ ($\{j \in D|j=1,\dots,J\}$). The functions $g(\cdot)$ and $f(\cdot)$ modify the opportunities $W$ at $j$ and the cost $c_{ij}$ of moving between locations $i$ and $j$, respectively. In this way, accessibility $A_i$ is a weighted sum of opportunities, with weights that vary on the cost of reaching $j$ from $i$.
+
+Common formulations of accessibility include cumulative opportunities with $g(W_j)=W_j$ and $f(c_{ij})=I(c_{ij}\le c^*)$:
+
+\begin{equation} \label{eq:9}A_i = \sum_{j\in D}W_jI(c_{ij})\le c^*)\end{equation}
+
+\noindent where $I(\cdot)$ is an indicator function that takes the value of one if the argument is true and zero otherwise, and $c^*$ is a cut-off or threshold value.
+
+Gravity-type measures include inverse distance decay:
+
+\begin{equation} \label{eq:10}A_i = \sum_{j\in D}\frac{W_j}{c_{ij}^\alpha}\end{equation}
+
+\noindent where $\alpha$ is a cost decay parameter, and the negative exponential:
+
+\begin{equation} \label{eq:11}A_i = \sum_{j\in D}W_jexp\Big(-\alpha \frac{c_{ij}}{c^*}\Big)\end{equation}
+
+\noindent where $c^*/\alpha$ is a kernel bandwidth that controls the rate of cost decay.
+
+4 Empirical example
+===================
+
+In this section we apply the methods discussed in the preceding sections to an empirical case study. Note that the source file for this paper is a reproducible R Notebook which, along with the data files, can be obtained from the following repository:
+
+https://github.com/paezha/Cost-Functions-for-Walking-Accessibility
+
+# 4.1 Context: accessibility to water
+
+In 2010, the right to safe drinking water was recognized by the United Nations [-@assembly2010human] in resolution A/RES/64/292. Globally, 785 million people still do not have access to basic drinking water services, defined as an improved source that takes less than 30 minutes round trip, including queuing time [@world2019progress]. By 2030, the world has committed to ensuring universal access to safely managed water supplies, i.e., sufficient supplies located on the premises and free from contamination [@world2019progress]. In order to meet this Sustainable Development Goal (SDG) target (6.1), representative measures of accessibility will be critical for the determination of equitable water point locations. Note that 30 minutes is not how much individuals are willing or even able to travel, but rather a threshold for how much (at most) they should travel. In this sense, accessibility is a normative indicator [see @Paez2012positive].
+
+# 4.2 Case study
+
+```{r extents-study-area, include=FALSE}
+# X and Y extents of study area
+
+kenya_box <- bbox(elevation.r)
+xxt <- kenya_box[1, 2] - kenya_box[1, 1]
+yxt <- kenya_box[2, 2] - kenya_box[2, 1]
+zxt <- cellStats(elevation.r, stat = "max") - cellStats(elevation.r, stat = "min")
+```
+
+The case study is based on a Maasai-operated group ranch in Kenya. The members of this group ranch have settled seven neighborhoods on the outskirts of the land managed by the group. Field-based research with members of these communities revealed that inadequate access to drinking water was a priority area of concern. As result of this research, a mixed-methods collaborative study was launched to better understand the situation and to support decision-making [@Barber2018designing]. 
+
+As part of the study, GPS coordinates were collected for homesteads (called _bomas_) and water points in three of the neighborhoods in the group ranch. For analysis, the geospatial information is combined with a DEM to empirically explore the implications of using different cost functions (i.e., straight line distance, surface distance, travel time, and metabolic energy) in the analysis of accessibility to water points. Ultimately, this has implications for water point locations and equity. 
+
+Raster data (DEM) were obtained from Japan Aerospace Exploration Agency (JAXA) (https://www.eorc.jaxa.jp/ALOS/en/aw3d30/data/index.htm). The spacing of the raster is 1 arcsec (approximately 30 m) and elevation values are average over the range of 1 arcsec grid pixel rounded to the integer. To protect the privacy of respondents, all coordinates in this study are set to a false origin. As seen in Figure \ref{fig:figure-study-area}, the study area is approximately `r format(xxt/1000, digits = 2)` km in the east-west direction, and `r format(yxt/1000, digits = 2)` km in the north-south direction. The maximum difference in elevation is approximately `r format(zxt, digits = 2)` m. The locations of water sources are shown as red triangles, and bomas surveyed appear as white crosses. 
+
+```{r figure-study-area, echo=FALSE, cache=TRUE, fig.cap="\\label{fig:figure-study-area}Digital elevation model and location of water sources (red triangles) and bomas (white crosses) in a region in Kenya (false origin)"}
+
+# Landscape, households and sources of water
+plot(elevation.r, 
+     xlab = "x coordinate (m)", 
+     ylab = "y coordinate (m)", 
+     legend.args=list(text='Elevation (m)', side=2, font=2, line=0.5, cex=0.8),
+     asp = 1.0, col = terrain.colors(255))
+#lines(Populated_Area.sp, col = "black")
+points(Origins.sp, col = "white", pch = 3)
+#points(Origins.sp[50], col = "black", pch = 3)
+points(Destinations.sp, col = "red", pch = 17)
+#points(Destinations.sp[1], col = "red", pch = 17)
+
+# Possible examples: Origin 37, destination 4
+# Origin 50, destination 1
+```
+
+# 4.3 Shortest path analysis
+
+There are several studies in the literature that report differences in paths when the definition of resistance changes [see inter alia @Wood2006, Fig.1; @Herzog2010theory, Fig. 3; @Schamel2017, Fig. 3; @Fonte2017, Fig. 12; @Kuniz2017, Fig. 8]. However, to the best of our knowledge, there are no systematic investigations of these differences. Do least-distance paths generally coincide with least-time paths? How often do least-energy paths diverge from the other two? To answer these questions in our empirical example, we begin by calculating the shortest paths. Shortest path calculations are implemented using the centroids of all raster cells in the study region as origins, and the water points as destinations. Calculations are based on straight-line distance, and functions for surface distance, time, and metabolic energy. Time and metabolic energy include the return-trip.
+
+Figure \ref{fig:figure-shortest-paths-kenya} shows examples of shortest paths on the digital elevation model, according to different cost criteria. These examples show that the paths obtained using surface distance and time (i.e., least-distance and least-time) produce very similar results. As noted above (Figure \ref{fig:figure-resistance-functions}), surface distance and speed change with slope in similar ways: both functions are symmetric on either side of their global minima, and the hiking function is only slightly shifted to the left, but perhaps not enough to make a practical difference in most situations. In contrast, when the criterion for resistance is metabolic energy (i.e., least-energy), the shortest paths are quite different. The function for metabolic energy is distinct from the surface distance and hiking speed functions in two important respects: it is not symmetric, and its minimum in the interval of interest is shifted to the left further than the hiking speed function. This reflects a more marked preference to reduce upward movement on slopes as the examples make clear; for instance, the outward trip may be more advantageous if following a route that presents more moderate downward slopes, whereas the return trip may try to avoid slopes as much as possible. This accounts for the change in routes depending on direction. Additionally, as seen in the figure, this function results in the kind of zig-zagging behavior often observed in movement on sloped terrain [@Llobera2007].
+
+More generally, paths when minimizing surface distance are not perfectly symmetric in the outward and return trips, although the differences tend to be minimal. Symmetry is increasingly lost when minimizing time. As suggested by the scatterplots in Figure \ref{fig:figure-scatterplots-kenya}, the minimum surface distance and minimum time paths diverge more in real terrain - although they are still more direct routes between origins and destinations compared to the minimum metabolic energy paths. Minimizing metabolic energy results in paths that are substantially different from those estimated minimizing travel time and distance, and also less symmetric across the to and from directions.
+
+Summary statistics of the costs associated with all shortest paths in this example are shown in Table \ref{tab:table-empirical-example-results}. The summary statistics are obtained after calculating the shortest path from the centroids of all raster cells to all water sources. It can be seen there that the correlation between Euclidean and surface distance is practically perfect. The correlations between Euclidean distance and time, on the one hand, and energy, on the other, are weaker. Energy correlates only moderately with surface distance and travel time, and in these two cases it does so with a great deal of dispersion, especially for longer trips (see Figure \ref{fig:figure-scatterplots-kenya}). These results indicate that while straight line distance and surface distance might be reasonably used interchangeably, the same is not necessarily true of other measures of cost, particularly metabolic energy.
+
+```{r vertical-distance, include=FALSE}
+# Calculate the vertical distance between cells. This requires a `transition` class object. 
+
+# Objects of this class collect the transition values between cells in a raster (i.e., for instance, the cost or distance). These objects can be created from rasters and store _resistance_ or _conductance_ values. Conductance is recorded only for adjacent cells (as opposed to _resistance_, whereby non-connected cells have a resistance value of +inf). Conductance is computationally more efficient, because the conductance between non-connected cells is zero. Typically, most cells are not connected, which means that sparse matrix techniques can be used.
+
+# Let's create a transition matrix using the difference in altitude between adjacent cells in the sample raster. This requires that we define a function for the difference in altitude, as follows:
+
+dv <- function(x){x[2] - x[1]}
+
+# This function will calculate the difference between any two cells `x[2]` and `x[1]`.
+```
+
+```{r vertical-transition, include=FALSE}
+# A transition matrix is created using the `gdistance::transition` function (note that `gdistance::transition` indicates the `transition` function from the `gdistance` package). This is done as follows:
+
+dv.tr <- transition(elevation.r, dv, 8, symm = FALSE)
+
+#The arguments of the function include the input raster, a function, the number of directions (how many cells are "adjacent"), and whether the matrix is symmetric. In this case, the argument for directions is 8, meaning that four orthogonal and four diagonal cells are adjacent. The argument could be 4 (only the four orthogonal cells are adjacent), or 16.
+```
+
+```{r horizontal-distance, include=FALSE}
+# We need to create a transition matrix using the distances between adjacent cells in the sample raster. This requires that we define a function for the distance, as follows:
+
+dh <- function(x){x[2]}
+
+# Since the values of the flat landscape are all set to the resolution, dh will simply be the resolution, which also corresponds to the horizontal inter-centroid distance between orthogonal cells.
+```
+
+```{r conductance-empirical, include=FALSE}
+
+# Vertical difference
+dv.tr <- transition(elevation.r, dv, 8, symm = FALSE)
+
+# Horizontal displacement
+
+plain.r <- elevation.r
+plain.r <- setValues(plain.r, 1)
+dh.tr <- transition(plain.r, dh, 8, symm = FALSE)
+dh.tr <- geoCorrection(dh.tr) # Note that the geoCorrection function returns the inverse of the distance!
+
+# Slope
+
+slope.tr <- geoCorrection(dv.tr)
+
+# Internally, the geoCorrection divides the horizontal distance by the vertical distance (which is the inverse of the slope), but then reports the inverse, thus giving the slope.
+
+# Adjacencies
+
+adj <- adjacent(elevation.r, cells = 1:ncell(elevation.r), pairs = TRUE, directions = 8)
+
+# Surface distance. Copy the horizontal distance first to initialize 
+
+distance.tr <- dh.tr
+
+# And the function can be applied now, but only to adjacent cells. Note that the difference in elevations is directly given by the object dv.tr, whereas the horizontal distance is the inverse after the geoCorrection:
+
+distance.tr[adj] <- 1 / sqrt(dv.tr[adj]^2 + (1/dh.tr[adj])^2)
+
+# This transition matrix stores the _inverse_ of the distance between adjacent cells, in other words, the conductance.
+
+# Next, initialize the speed:
+
+speed.tr <- slope.tr
+
+# And the speed function can be applied now, but only to adjacent cells - note that the speed function is in m/min:
+
+speed.tr[adj] <- 100 * exp(-3.5 * abs(slope.tr[adj] + 0.05))
+
+# Travel time is calculated by dividing the distance by the speed (horizontal distance as in van Etten, 2017, and surface distance). Internally geoCorrection divides distance by speed, but reports the inverse, therefore the transition object is the inverse of time (in minutes):
+
+time_h.tr <- speed.tr
+time_h.tr <- geoCorrection(speed.tr)
+
+# Travel time is calculated by dividing the surface distance by the speed (recall that the surface distance was given in the inverse in the transition object!). This is given in minutes:
+
+time_s.tr <- speed.tr
+time_s.tr[adj] <- 1 / (distance.tr[adj] * speed.tr[adj])
+
+# To obtain the conductance take the inverse:
+
+time_s.tr[adj] <- 1 / (time_s.tr[adj])
+
+# A new transition matrix can be created to reflect the metabolic energy cost of walking. Initialize the object:
+
+energy.tr <- slope.tr
+
+# Note that there are some quite extreme values of the slope that lie outside of the range of the energy function:
+
+#summary(summary(transitionMatrix(slope.tr)))
+
+# To deal with this, a new vertical displacement function is defined that limits the vertical displacement as follows:
+
+dv_adj <- function(x){ifelse((x[2] - x[1]) > 0, min(x[2] - x[1], 13), max(x[2] - x[1], -13))}
+
+# The value of 13 is to limit the slope to approx abs(0.4)
+
+# Replace those values for the max slope that the energy equation can handle, approx. abs(0.4)
+
+dv_adj.tr <- transition(elevation.r, dv_adj, 8, symm = FALSE)
+
+# A new slope transition object is obtained using this adjusted vertical displacement:
+
+slope_adj.tr <- geoCorrection(dv_adj.tr)
+
+# The energy function can be applied now, but only to adjacent cells - assume a base weight of 50 kg:
+
+energy.tr[adj] <- 50 * (280.5 * slope_adj.tr[adj]^5 - 58.7 * slope_adj.tr[adj]^4 - 76.8 * slope_adj.tr[adj]^3 + 51.9 * slope_adj.tr[adj]^2 + 19.6 * slope_adj.tr[adj] + 2.5)
+
+# This transition matrix stores the energy necessary for transitioning between adjacent based on the slope, however, this energy is given in $\frac{J}{m_v}$, that is, depends on the vertical distance displacement in m. For this reason, we need to adjust the energy to reflect the vertical displacement, which is the difference in elevations (in absolute value, since the slope already accounts for the negative slope). The conductance can be obtained by the inverse of multiplying the difference in elevations by the energy values:
+
+energy.tr[adj] <- 1 / (abs(dv_adj.tr[adj]) * energy.tr[adj] + 0.01) 
+
+# The conductance is the _inverse_ of energy consumption in 1/J
+```
+
+```{r cost-matrices-empirical, include=FALSE, cache=TRUE, eval=FALSE}
+# EVALUATE ONLY IF NEW COST MATRICES ARE NEEDED - These matrices are saved in "Cost_Matrices_Empirical_Example.RData"
+
+# Calculate cost matrices
+
+# Origins and destinations in Kenya
+
+elevation.sp <- as(elevation.r, "SpatialPixelsDataFrame")
+origins_kenya <- as.data.frame(coordinates(elevation.sp))
+coordinates(origins_kenya) <- ~ x + y
+
+
+# Euclidean distance
+straight_line_KD <- pointDistance(origins_kenya,
+                                  Destinations.sp, 
+                                  type='Euclidean', lonlat = FALSE)
+
+# Surface distance
+travel_distance_KD <- costDistance(distance.tr,
+                                   origins_kenya,
+                                   Destinations.sp)
+
+# Travel time
+travel_time_KD <- costDistance(time_s.tr,
+                               origins_kenya,
+                               Destinations.sp)
+
+# Travel time RETURN TRIP
+travel_time_KO <- costDistance(time_s.tr,
+                               Destinations.sp,
+                               origins_kenya)
+
+# Metabolic energy
+travel_energy_KD <- costDistance(energy.tr, 
+                                 origins_kenya,
+                                 Destinations.sp)
+
+# Metabolic energy RETURN TRIP
+travel_energy_KO <- costDistance(energy.tr,
+                                 Destinations.sp, 
+                                 origins_kenya)
+
+save(straight_line_KD, travel_distance_KD, travel_energy_KD, travel_energy_KO, travel_time_KD, travel_time_KO,
+     file = "Cost_Matrices_for_Empirical_Example.RData")
+```
+
+```{r table-empirical-example-results, results= "asis", echo=FALSE}
+# Cost table
+cost_kenya <- data.frame(Euclidean = as.vector(straight_line_KD),
+                   Surface = as.vector(travel_distance_KD),
+                   Time = as.vector(travel_time_KD) + as.vector(travel_time_KO),
+                   Energy = as.vector(travel_energy_KD) + as.vector(travel_energy_KO)
+                   )
+
+# Create a dataframe with all relevant info
+kenya_results <- data.frame(
+  Resistance = c("Euclidean Distance", "Surface Distance", "Travel Time", "Metabolic Energy"),
+  rbind(summary(as.vector(straight_line_KD)),
+        summary(as.vector(travel_distance_KD)),
+        summary(as.vector(travel_time_KD) + as.vector(travel_time_KO)),
+        summary(as.vector(travel_energy_KD) + as.vector(travel_energy_KO))),
+  data.frame(cor(cost_kenya))
+  )
+
+rownames(kenya_results) <- NULL
+
+kable(kenya_results, 
+      "latex", 
+      digits = 2, 
+      booktabs = T, 
+      caption = "\\label{tab:table-empirical-example-results}Summary statistics of the cost of shortest paths according to different definitons of cost in the empirical example") %>%
+    footnote(general = c(paste("Euclidean and Surface distances are in m; Time is in min; Metabolic energy is in J (baseline weight is 50 kg)")),
+           escape = FALSE) %>%
+  add_header_above(c(" " = 1, "Summary Statistics" = 6, "Correlation" = 4)) %>%
+  kable_styling(latex_options = c("scale_down"))
+```
+
+```{r scatterplots-kenya, echo=FALSE, message= FALSE}
+# Euclidean and Surface distances
+dist2.plot <- ggplot(data = cost_kenya, aes(x = Euclidean, y = Surface)) + 
+  geom_count(alpha = 0.1, color = "gray", shape = 15) + 
+  geom_smooth() + 
+  theme_tufte()
+
+# Surface distance and Time
+surf_time.plot <- ggplot(data = cost_kenya, aes(x = Surface, y = Time)) + 
+  geom_point(alpha = 0.1, color = "gray", shape = 15) + 
+  geom_smooth() +
+  theme_tufte()
+
+# Surface distance and Energy
+surf_energy.plot <- ggplot(data = cost_kenya, aes(x = Surface, y = Energy)) + 
+  geom_point(alpha = 0.1, color = "gray", shape = 15) + 
+  geom_smooth() +
+  theme_tufte()
+
+# Time and Energy
+time_energy.plot <- ggplot(data = cost_kenya, aes(x = Time, y = Energy)) + 
+  geom_point(alpha = 0.1, color = "gray", shape = 15) + 
+  geom_smooth() +
+  theme_tufte()
+```
+
+```{r figure-scatterplots-kenya, echo=FALSE, cache=TRUE, message=FALSE, fig.cap="\\label{fig:figure-scatterplots-kenya}Scatterplots of shortest path costs for different definitions of resistance: empirical example"}
+
+grid.arrange(dist2.plot, surf_time.plot, surf_energy.plot, time_energy.plot, nrow = 2, ncol = 2)
+```
+
+```{r shortest-path-kenya, include=FALSE}
+# Find the shortest path between the origin and the destination using the `shortestPath` function
+
+# Sample pair 1
+
+# Surface distance
+OtoD1_distance <- shortestPath(distance.tr, Origins.sp[37], Destinations.sp[4], output = "SpatialLines")
+DtoO1_distance <- shortestPath(distance.tr, Destinations.sp[4], Origins.sp[37], output = "SpatialLines")
+
+# Travel time
+OtoD1_time <- shortestPath(time_s.tr, Origins.sp[37], Destinations.sp[4], output = "SpatialLines")
+DtoO1_time <- shortestPath(time_s.tr, Destinations.sp[4], Origins.sp[37], output = "SpatialLines")
+
+# Metabolic energy
+OtoD1_energy <- shortestPath(energy.tr, Origins.sp[37], Destinations.sp[4], output = "SpatialLines")
+DtoO1_energy <- shortestPath(energy.tr, Destinations.sp[4], Origins.sp[37], output = "SpatialLines")
+```
+
+```{r figure-shortest-paths-kenya, fig.width=4, fig.height=7, echo=FALSE, eval = TRUE, cache = TRUE, fig.cap="\\label{fig:figure-shortest-paths-kenya}Examples of shortest paths using different definitions of resistance, case study (blue path is origin-destination, red dashed path is destination-origin, i.e., return trip)"}
+
+# Parameters for figure
+par(mfrow = c(3, 1), mar = c(2, 2, 2, 2))
+
+# Plot surface distance shortest path
+plot(crop(elevation.r, extent(534750, 536650, 25200, 27055)), 
+     xlab = "x coordinate (m)", 
+     ylab = "y coordinate (m)", 
+     legend.args=list(text='Elevation (m)', side=2, font=2, line=0.5, cex=0.8),
+     asp = 1.0, col = terrain.colors(255))
+lines(OtoD1_distance, col = "blue", lwd = 2)
+lines(DtoO1_distance, col = "red", lwd = 2, lty = "dashed")
+
+title(main = "Surface Distance Shortest Path")
+
+# Plot surface distance shortest path
+plot(crop(elevation.r, extent(534750, 536650, 25200, 27055)), 
+     xlab = "x coordinate (m)", 
+     ylab = "y coordinate (m)", 
+     legend.args=list(text='Elevation (m)', side=2, font=2, line=0.5, cex=0.8),
+     asp = 1.0, col = terrain.colors(255))
+lines(OtoD1_time, col = "blue", lwd = 2)
+lines(DtoO1_time, col = "red", lwd = 2, lty = "dashed")
+
+title(main = "Time Shortest Path")
+
+# Plot metabolic energy shortest path
+plot(crop(elevation.r, extent(534750, 536650, 25200, 27055)), 
+     xlab = "x coordinate (m)", 
+     ylab = "y coordinate (m)", 
+     legend.args=list(text='Elevation (m)', side=2, font=2, line=0.5, cex=0.8),
+     asp = 1.0, col = terrain.colors(255))
+lines(OtoD1_energy, col = "blue", lwd = 2)
+lines(DtoO1_energy, col = "red", lwd = 2, lty = "dashed")
+
+title(main = "Metabolic Energy Shortest Path")
+```
+
+```{r extract-path-coordinates, include=FALSE, eval = FALSE}
+# For 3D plotting extract the planar coordinates of the paths (i.e., x and y):
+
+# These figures are not included in the paper
+
+# Sample pair
+
+# Surface distance
+OtoD1_distance_coords <- as.matrix(coordinates(OtoD1_distance[1,])[[1]][[1]])
+DtoO1_distance_coords <- as.matrix(coordinates(DtoO1_distance[1,])[[1]][[1]])
+
+# Travel time
+OtoD1_time_coords <- as.matrix(coordinates(OtoD1_time[1,])[[1]][[1]])
+DtoO1_time_coords <- as.matrix(coordinates(DtoO1_time[1,])[[1]][[1]])
+
+#Metabolic energy
+OtoD1_energy_coords <- as.matrix(coordinates(OtoD1_energy[1,])[[1]][[1]])
+DtoO1_energy_coords <- as.matrix(coordinates(DtoO1_energy[1,])[[1]][[1]])
+```
+
+```{r retrieve-elevation, include=FALSE, eval = FALSE}
+#Retrieve the elevation of the raster along the path of the OtoD line, by means of `raster::extract`:
+
+# These figures are not included in the paper
+
+# Sample pair
+
+# Surface distance
+elevations_distance_OtoD1 <- raster::extract(elevation.r, OtoD1_distance_coords)
+elevations_distance_DtoO1 <- raster::extract(elevation.r, DtoO1_distance_coords)
+
+# Travel time
+elevations_time_OtoD1 <- raster::extract(elevation.r, OtoD1_time_coords)
+elevations_time_DtoO1 <- raster::extract(elevation.r, DtoO1_time_coords)
+
+# Metabolic energy
+elevations_energy_OtoD1 <- raster::extract(elevation.r, OtoD1_energy_coords)
+elevations_energy_DtoO1 <- raster::extract(elevation.r, DtoO1_energy_coords)
+```
+
+```{r tidy-dataframes-path, include=FALSE, eval = FALSE}
+# The rows and columns are clunky! The conversion of raster to matrix seems to change the way the rows and the columns are organized. This requires that the row and column numbers be rearranged as follows:
+
+# These figures are not included in the paper
+
+# Sample pair 1
+
+# Surface distance
+OtoD1_distance_path <- data.frame(x = OtoD1_distance_coords[,1],
+                        y = OtoD1_distance_coords[,2], 
+                        z = elevations_distance_OtoD1)
+DtoO1_distance_path <- data.frame(x = DtoO1_distance_coords[,1],
+                        y = DtoO1_distance_coords[,2], 
+                        z = elevations_distance_DtoO1)
+
+# Travel time
+OtoD1_time_path <- data.frame(x = OtoD1_time_coords[,1],
+                        y = OtoD1_time_coords[,2], 
+                        z = elevations_time_OtoD1)
+DtoO1_time_path <- data.frame(x = DtoO1_time_coords[,1],
+                        y = DtoO1_time_coords[,2], 
+                        z = elevations_time_DtoO1)
+
+# Metabolic energy
+OtoD1_energy_path <- data.frame(x = OtoD1_energy_coords[,1],
+                        y = OtoD1_energy_coords[,2], 
+                        z = elevations_energy_OtoD1)
+DtoO1_energy_path <- data.frame(x = DtoO1_energy_coords[,1],
+                        y = DtoO1_energy_coords[,2], 
+                        z = elevations_energy_DtoO1)
+```
+
+```{r convert-path-to-points, include=FALSE, eval = FALSE}
+# Convert to `SpatialPoints` using `coordinates`:
+
+# These figures are not included in the paper
+
+# Distance
+coordinates(OtoD1_distance_path) <- ~ x + y
+coordinates(DtoO1_distance_path) <- ~ x + y
+
+# Time
+coordinates(OtoD1_time_path) <- ~ x + y
+coordinates(DtoO1_time_path) <- ~ x + y
+
+# Metabolic Energy
+coordinates(OtoD1_energy_path) <- ~ x + y
+coordinates(DtoO1_energy_path) <- ~ x + y
+```
+
+```{r false-projection-paths, include=FALSE, eval = FALSE}
+# Copy elevation.r to scene.r
+scene.r <- elevation.r
+
+# These figures are not included in the paper
+
+# Add a false projections:
+
+# Scene
+proj4string(scene.r) <- "+proj=utm +zone=34 +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 "
+
+# Distance
+proj4string(OtoD1_distance_path) <- crs("+proj=utm +zone=34 +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ")
+proj4string(DtoO1_distance_path) <- crs("+proj=utm +zone=34 +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ")
+
+# Time
+proj4string(OtoD1_time_path) <- crs("+proj=utm +zone=34 +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ")
+proj4string(DtoO1_time_path) <- crs("+proj=utm +zone=34 +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ")
+
+# Metabolic Energy
+proj4string(OtoD1_energy_path) <- crs("+proj=utm +zone=34 +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ")
+proj4string(DtoO1_energy_path) <- crs("+proj=utm +zone=34 +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ")
+```
+
+```{r transform-paths, include=FALSE, eval = FALSE}
+# Transform to lat-long:
+
+# These figures are not included in the paper
+
+# Scene
+scene.r <- projectRaster(scene.r, 
+                             crs = crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+# Distance
+OtoD1_distance_path <- spTransform(OtoD1_distance_path, crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+DtoO1_distance_path <- spTransform(DtoO1_distance_path, crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+# Time
+OtoD1_time_path <- spTransform(OtoD1_time_path, crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+DtoO1_time_path <- spTransform(DtoO1_time_path, crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+# Metabolic Energy
+OtoD1_energy_path <- spTransform(OtoD1_energy_path, crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+DtoO1_energy_path <- spTransform(DtoO1_energy_path, crs("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+```
+
+```{r convert-paths-to-gps, include=FALSE, eval = FALSE}
+# Convert paths to GPS-like object:
+
+# These figures are not included in the paper
+
+# Distance
+OtoD1_distance_path_as_gps <- data.frame(coordinates(OtoD1_distance_path), altitude = OtoD1_distance_path$z) %>% rename(long = x, lat = y)
+
+DtoO1_distance_path_as_gps <- data.frame(coordinates(DtoO1_distance_path), altitude = DtoO1_distance_path$z) %>% rename(long = x, lat = y)
+
+# Time
+OtoD1_time_path_as_gps <- data.frame(coordinates(OtoD1_time_path), altitude = OtoD1_time_path$z) %>% rename(long = x, lat = y)
+DtoO1_time_path_as_gps <- data.frame(coordinates(DtoO1_time_path), altitude = DtoO1_time_path$z) %>% rename(long = x, lat = y)
+
+# Metabolic Energy
+OtoD1_energy_path_as_gps <- data.frame(coordinates(OtoD1_energy_path), altitude = OtoD1_energy_path$z) %>% rename(long = x, lat = y)
+
+DtoO1_energy_path_as_gps <- data.frame(coordinates(DtoO1_energy_path), altitude = DtoO1_energy_path$z) %>% rename(long = x, lat = y)
+```
+
+```{r crop-scene, include=FALSE, eval = FALSE}
+# These figures are not included in the paper
+
+# Crop scene for plotting
+scene.r <- crop_raster_track(scene.r, 
+                             DtoO1_energy_path_as_gps$lat, 
+                             DtoO1_energy_path_as_gps$long, 
+                             width_buffer = 0.25,
+                             increase_resolution = 2)
+```
+
+```{r figure-shortest-paths-kenya-3d, fig.width=4, fig.height=7, eval = FALSE, echo=FALSE, cache = TRUE, fig.cap="\\label{fig:figure-shortest-paths-kenya-3d}Examples of shortest paths according to different cost criteria (blue path is origin-destination, red path is destination-origin, i.e., return trip)"}
+
+# These figures are not included in the paper
+
+# Parameters for figure
+par(mfrow = c(3, 1), mar = c(2, 2, 2, 2))
+
+# Scene settings
+sunangle = 45
+zscale = 15
+
+#Make an elevation shading layer with dark valleys and light peaks (not essential but I like it!)
+#elevation_overlay <- elevation_shade(scene.r, elevation_palette = c("#000000", "#FFFFFF"), png_opacity = 0.6)
+
+
+#Calculate the 'rayshader' scene (see 'rayshader' documentation)
+elmat <- matrix(
+  raster::extract(scene.r, raster::extent(scene.r), method = 'bilinear'),
+  nrow = ncol(scene.r),
+  ncol = nrow(scene.r)
+)
+
+scene <- elmat %>%
+  sphere_shade(sunangle = sunangle, texture = "desert") #%>% 
+  #add_overlay(elevation_overlay)
+
+#Render the 'rayshader' scene for distance for distance
+rayshader::plot_3d(
+  scene,
+  elmat,
+  zscale = zscale,
+  solid = TRUE,
+  shadow = FALSE,
+  shadowdepth = -10
+)
+
+# Add paths
+# Distance
+add_gps_to_rayshader(
+  scene.r,
+  OtoD1_distance_path_as_gps$lat,
+  OtoD1_distance_path_as_gps$long,
+  OtoD1_distance_path_as_gps$elevation,
+  clamp_to_ground = TRUE,
+  as_line = TRUE,
+  line_width = 1.5,
+  lightsaber = FALSE,
+  colour = "blue",
+  zscale = zscale,
+  ground_shadow = TRUE
+)
+
+add_gps_to_rayshader(
+  scene.r,
+  DtoO1_distance_path_as_gps$lat,
+  DtoO1_distance_path_as_gps$long,
+  DtoO1_distance_path_as_gps$elevation,
+  clamp_to_ground = TRUE,
+  as_line = TRUE,
+  line_width = 1.5,
+  lightsaber = FALSE,
+  colour = "red",
+  zscale = zscale,
+  ground_shadow = TRUE
+)
+
+# Render on device for distance
+render_snapshot()
+
+#Render the 'rayshader' scene for time
+rayshader::plot_3d(
+  scene,
+  elmat,
+  zscale = zscale,
+  solid = TRUE,
+  shadow = FALSE,
+  shadowdepth = -10
+)
+
+# Add paths
+# Time
+add_gps_to_rayshader(
+  scene.r,
+  OtoD1_time_path_as_gps$lat,
+  OtoD1_time_path_as_gps$long,
+  OtoD1_time_path_as_gps$elevation,  
+  clamp_to_ground = TRUE,
+  as_line = TRUE,
+  line_width = 1.5,
+  lightsaber = FALSE,
+  colour = "blue",
+  zscale = zscale,
+  ground_shadow = TRUE
+)
+
+add_gps_to_rayshader(
+  scene.r,
+  DtoO1_time_path_as_gps$lat,
+  DtoO1_time_path_as_gps$long,
+  DtoO1_time_path_as_gps$elevation,
+  clamp_to_ground = TRUE,
+  as_line = TRUE,
+  line_width = 1.5,
+  lightsaber = FALSE,
+  colour = "red",
+  zscale = zscale,
+  ground_shadow = TRUE
+)
+
+# Render on device
+render_snapshot()
+
+#Render the 'rayshader' scene for distance for energy
+rayshader::plot_3d(
+  scene,
+  elmat,
+  zscale = zscale,
+  solid = TRUE,
+  shadow = FALSE,
+  shadowdepth = -10
+)
+
+# Add paths
+# Distance
+add_gps_to_rayshader(
+  scene.r,
+  OtoD1_energy_path_as_gps$lat,
+  OtoD1_energy_path_as_gps$long,
+  OtoD1_energy_path_as_gps$elevation,
+  clamp_to_ground = TRUE,
+  as_line = TRUE,
+  line_width = 1.5,
+  lightsaber = FALSE,
+  colour = "blue",
+  zscale = zscale,
+  ground_shadow = TRUE
+)
+
+add_gps_to_rayshader(
+  scene.r,
+  DtoO1_energy_path_as_gps$lat,
+  DtoO1_energy_path_as_gps$long,
+  DtoO1_energy_path_as_gps$elevation,
+  clamp_to_ground = TRUE,
+  as_line = TRUE,
+  line_width = 1.5,
+  lightsaber = FALSE,
+  colour = "red",
+  zscale = zscale,
+  ground_shadow = TRUE
+)
+
+# Render on device for distance
+render_snapshot()
+```
+
+Inspection of the summary statistics raises a relevant question: how much do costs diverge when paths based on different criteria are used? Consider the paths shown in Figure \ref{fig:figure-shortest-paths-kenya}. For the same origin-destination pair, there is a minimum surface-distance path, a minimum time path, and a minimum metabolic energy path. These are all generally different from each other. However, what is the surface distance over the minimum time path? And how different is it from the surface distance when it was minimized? Similarly, it is evident that minimum metabolic energy paths are longer than minimum surface distance and time paths, but by how much? To explore these questions, we take the origins and destinations in the empirical example (i.e., $73$ bomas and $11$ water points) and calculate the shortest paths according to surface distance, time, and energy criteria. Then, we re-analyze each shortest path to calculate the equivalent surface distance, equivalent time, and equivalent energy. The results of this analysis are shown in Figure \ref{fig:figure-scatterplots-equivalent-cost-kenya}.
+
+In the scatterplots, the $x$-axis is the cost that was minimized. In the $y$-axis is the equivalent cost for the path between the same origin-destination pair. The black line is the $45$-degree (i.e., the identity) line. Notice that the equivalent cost is _at least_ the same as the minimized cost. This happens when the costs for the two criteria are identical for a path. More generally, the equivalent cost tends to be higher. That said, the surface distance over minimum time paths tends to be very similar to the minimum surface distance. The similarity is less marked in the converse case: times over minimum surface distance paths tend to be markedly longer than minimum times. The most important divergences are in terms of metabolic energy. Equivalent surface distance and time are considerably longer over minimum energy paths. Likewise, equivalent energy tends to be considerably higher over minimum surface distance and time paths.
+
+These results indicate, again, that surface distance and time are potentially good proxies for each other, but neither is a good proxy for metabolic energy. In the following section this is seen more clearly when the results of the shortest path analysis are used for creating accessibility surfaces.
+
+```{r equivalent-cost-calculations-kenya, eval = FALSE, include=FALSE}
+# EVALUATE ONLY IF NEW COST VALUES ARE NEEDED. Results are stored in Shortest_Paths_Empirical.RData
+
+# This experiment is to see what are the equivalent costs when calculating shortest paths using a certain criterion. For instance, when shortest paths are calculated using surface distance, what would be the corresponding time and energy?
+
+# Define a function for calculating the equivalent cost. Note that this involves obtaining the shortest path for a set criterion, and then extracting the information to calculate the equivalent costs according to other criteria. Shortest paths must have a similar number of segments to those calculated using energy.
+
+equivalent_cost <- function(origin = origin, destination = destination, energy.tr = energy.tr, transition = transition, raster = raster){
+  
+  # Origin to destination
+  # Find shortest path according to energy
+  shortest_path_e <- shortestPath(energy.tr,
+                                  origin, 
+                                  destination,
+                                  output = "SpatialLines")
+  # Find number of segments in this shortest path
+  n_seg <- length(unlist(coordinates(shortest_path_e@lines[[1]])))/2
+  
+  # Find shortest path - distance
+  shortest_path <- shortestPath(transition, origin, destination, output = "SpatialLines")
+  # Sample on this line to obtain similar number of segments to energy based shortest path
+  shortest_path_coords <- spsample(shortest_path, 
+                                    n = n_seg,
+                                    type = "regular")
+  # Retrieve elevations at coordinates of sampled points
+  elevations <- raster::extract(raster, shortest_path_coords)
+  
+  # Convert coordinates and elevations to dataframe and calculate distances, differences in elevation, slopes, and costs 
+  o_to_d <- data.frame(shortest_path_coords, z = elevations) %>%
+    mutate(distance = sqrt((x - lag(x, default = NA))^2 + (y - lag(y, default = NA))^2), #euclidean distance
+           diff_elev = z - lag(z, default = NA), #difference of elevations
+           slope = diff_elev/distance, #slope
+           surf_distance = sqrt(distance^2 + diff_elev^2), #distance on surface
+           time = 1/100 * distance * exp(3.5 * abs(slope + 0.05)), #time
+           energy = 50 * (280.5 * slope^5 - 58.7 * slope^4 - 76.8 * slope^3 + 51.9 * slope^2 + 19.6 * slope + 2.5)) %>% #energy
+    dplyr::select(distance, surf_distance, time, energy) %>% #select variables of interest
+    colSums(na.rm = TRUE)
+
+  #Destination to origin
+  # Find shortest path according to energy
+  shortest_path_e <- shortestPath(energy.tr,
+                                  destination,
+                                  origin,
+                                  output = "SpatialLines")
+  # Find number of segments in this shortest path
+  n_seg <- length(unlist(coordinates(shortest_path_e@lines[[1]])))/2
+  
+  # Find shortest path - distance
+  shortest_path <- shortestPath(transition, destination, origin, output = "SpatialLines")
+  # Sample on this line to obtain similar number of segments to energy based shortest path
+  shortest_path_coords <- spsample(shortest_path, 
+                                    n = n_seg,
+                                    type = "regular")
+  # Retrieve elevations at coordinates of sampled points
+  elevations <- raster::extract(raster, shortest_path_coords)
+  
+  # Convert coordinates and elevations to dataframe and calculate distances, differences in elevation, slopes, and costs 
+  d_to_o <- data.frame(shortest_path_coords, z = elevations) %>%
+    mutate(distance = sqrt((x - lag(x, default = NA))^2 + (y - lag(y, default = NA))^2), #euclidean distance
+           diff_elev = z - lag(z, default = NA), #difference of elevations
+           slope = diff_elev/distance, #slope
+           surf_distance = sqrt(distance^2 + diff_elev^2), #distance on surface
+           time = 1/100 * distance * exp(3.5 * abs(slope + 0.05)), #time
+           energy = 50 * (280.5 * slope^5 - 58.7 * slope^4 - 76.8 * slope^3 + 51.9 * slope^2 + 19.6 * slope + 2.5)) %>% #energy
+    dplyr::select(distance, surf_distance, time, energy) %>% #select variables of interest
+    colSums(na.rm = TRUE)
+  
+  # Add round-trip
+  o_to_d + d_to_o
+}
+
+# One origin is problematic
+Origins.sp <- Origins.sp[-42]
+
+#Distance-based shortest paths and conversion to other cost measures:
+dist_equivalent <- data.frame(distance = numeric(), 
+                              surf_distance = numeric(), 
+                              time = numeric(), 
+                              energy = numeric())
+ind <- 0
+for(i in 1:length(Origins.sp)){
+#for(i in 1:length(fivepct)){
+  for(j in 1:length(Destinations.sp)){
+    ind <- ind + 1
+    dist_equivalent[ind,] <- equivalent_cost(origin = Origins.sp[i],
+    #dist_equivalent[ind,] <- equivalent_cost(origin = origins_kenya[fivepct[i]],
+                                           destination = Destinations.sp[j],
+                                           energy.tr = energy.tr,
+                                           transition = distance.tr,
+                                           raster = elevation.r)
+  }
+}
+
+#Time-based shortest paths and conversion to other cost measures:
+time_equivalent <- data.frame(distance = numeric(), 
+                              surf_distance = numeric(), 
+                              time = numeric(), 
+                              energy = numeric())
+ind <- 0
+for(i in 1:length(Origins.sp)){
+#for(i in 1:length(fivepct)){
+  for(j in 1:length(Destinations.sp)){
+    ind <- ind + 1
+    time_equivalent[ind,] <- equivalent_cost(origin = Origins.sp[i],
+                                           destination = Destinations.sp[j],
+                                           energy.tr = energy.tr,
+                                           transition = time_s.tr,
+                                           raster = elevation.r)
+  }
+}
+
+#Energy-based shortest paths and conversion to other cost measures:
+energy_equivalent <- data.frame(distance = numeric(), 
+                              surf_distance = numeric(), 
+                              time = numeric(), 
+                              energy = numeric())
+ind <- 0
+for(i in 1:length(Origins.sp)){
+#for(i in 1:length(fivepct)){
+  for(j in 1:length(Destinations.sp)){
+    ind <- ind + 1
+    energy_equivalent[ind,] <- equivalent_cost(origin = Origins.sp[i],
+                                           destination = Destinations.sp[j],
+                                           energy.tr = energy.tr,
+                                           transition = energy.tr,
+                                           raster = elevation.r)
+  }
+}
+
+# Save results
+save(dist_equivalent, time_equivalent, energy_equivalent, file = "Shortest_Paths_Empirical.RData")
+```
+
+```{r scatterplots-equivalent-cost-kenya, echo=FALSE, message= FALSE}
+# Create scatterplots for various pairs of cost variables. Notice that the x-axis is the cost variable that was minimized, and the y-axis is the equivalent when something else was minimized
+
+# Surface distance-time
+dist_eq_time.plot <- ggplot(data = equivalent, aes(x = surf_distance_d, y = surf_distance_t)) + 
+  geom_point(alpha = 0.5, color = "gray", shape = 15) + 
+  geom_abline(intercept = 0, slope = 1) + 
+  xlab("Surface Distance") +
+  ylab("Per Time") +
+  theme_tufte()
+
+#Surface distance-energy
+dist_eq_energy.plot <- ggplot(data = equivalent, aes(x = surf_distance_d, y = surf_distance_e)) + 
+  geom_point(alpha = 0.5, color = "gray", shape = 15) + 
+  geom_abline(intercept = 0, slope = 1) +
+  xlab("Surface Distance") +
+  ylab("Per Energy") +
+  theme_tufte()
+
+#Time-Surface distance
+time_eq_dist.plot <- ggplot(data = equivalent, aes(x = time_t, y = time_d)) + 
+  geom_point(alpha = 0.5, color = "gray", shape = 15) + 
+  geom_abline(intercept = 0, slope = 1) + 
+  xlab("Time") +
+  ylab("Per Surface Distance") +
+  theme_tufte()
+
+#Time-energy
+time_eq_energy.plot <-ggplot(data = equivalent, aes(x = time_t, y = time_e)) + 
+  geom_point(alpha = 0.5, color = "gray", shape = 15) + 
+  geom_abline(intercept = 0, slope = 1) + 
+  xlab("Time") +
+  ylab("Per Energy") +
+  theme_tufte()
+
+#Energy-surface distance
+energy_eq_dist.plot <- ggplot(data = equivalent, aes(x = energy_e, y = energy_d)) + 
+  geom_point(alpha = 0.5, color = "gray", shape = 15) + 
+  geom_abline(intercept = 0, slope = 1) + 
+  xlab("Energy") +
+  ylab("Per Surface Distance") +
+  theme_tufte()
+
+#Energy-time
+energy_eq_time.plot <- ggplot(data = equivalent, aes(x = energy_e, y = energy_t)) + 
+  geom_point(alpha = 0.5, color = "gray", shape = 15) + 
+  geom_abline(intercept = 0, slope = 1) + 
+  xlab("Energy") +
+  ylab("Per Time") +
+  theme_tufte()
+```
+
+```{r figure-scatterplots-equivalent-cost-kenya, echo=FALSE, cache=TRUE, message=FALSE, fig.cap="\\label{fig:figure-scatterplots-equivalent-cost-kenya}Scatterplots of shortest path costs and equivalent cost for different definitions of resistance"}
+
+grid.arrange(dist_eq_time.plot, dist_eq_energy.plot,
+             time_eq_dist.plot, time_eq_energy.plot,
+             energy_eq_dist.plot, energy_eq_time.plot,
+             layout_matrix = rbind(c(NA, 1, 2),
+                                   c(3, NA, 4),
+                                   c(5, 6, NA)),
+             bottom="Cost", 
+             left="Equivalent Cost")
+```
+
+# 4.4 Accessibility analysis
+
+Once the shortest paths have been calculated, the results can be used to implement an accessibility indicator. For this analysis we select a cumulative opportunities measure (Equation \ref{eq:9}). The critical value $c^*$ for the two distance-based indicators (Euclidean and surface) is set to $1$ km. The critical value $c^*$ for travel time is $30$ minutes for the round-trip journey (assuming that the queuing time at the source is zero, which is not necessarily true). There are no guidelines for how much _energy_ should be spent fetching water. For the analysis we tune the critical value $c^*$ in such a way that the equivalent energy is similar to a round trip of $30$ minutes. Accessibility maps are shown in Figure \ref{fig:figure-accessibility-cumulative-opportunities-kenya}.
+
+The levels of accessibility are counts of accessible opportunities. As such, some regions have accessibility to zero water points, or to one water point, two water points, and so on. Bearing this in mind, the red regions indicate high priority areas for intervention since they do not satisfy the criteria for basic service, i.e., accessibility to at least one water source. Accessibility based on straight-line distance leads (as expected) to circular service areas. This symmetry is lost progressively as the effects of the landscape are captured by other cost functions. Still, surface distance and travel time are remarkably similar, although travel time, even accounting for the return trip, gives a slightly more generous picture of accessibility than the distance criteria. In line with the discussion in the preceding subsection, metabolic energy-based accessibility is distinct, and does not replicate the somewhat artificial circular catchment areas around water sources. According to this criterion (keeping in mind that it was tuned to match a $30$-minute travel time) there are fewer regions that lack basic access in the study area.
+
+```{r accessibility-calculations-kenya, eval = FALSE, include=FALSE}
+#Accessibility calculations for the empirical example
+
+# Check this, may be useful to select parameters: http://www.un.org/waterforlifedecade/pdf/human_right_to_water_and_sanitation_media_brief.pdf
+
+# Distance decay parameter
+
+ddalpha = 1
+
+# straight-line distance
+
+# Initialize a raster for the accessibility:
+acc_euclidean_kenya <- elevation.r
+
+# Calculate accessibility using a negative exponential function with a bandwidth of the median of the cost variable
+junk <- rowSums(exp(-ddalpha * (straight_line_KD)/1000))
+acc_euclidean_kenya[] <- junk
+
+# Surface distance
+
+# Initialize a raster for the accessibility:
+acc_distance_kenya <- elevation.r
+
+# Calculate accessibility using a negative exponential function with a bandwidth of the median of the cost variable
+junk <- rowSums(exp(-ddalpha * (travel_distance_KD)/1000))
+acc_distance_kenya[] <- junk
+
+# Travel time
+# Initialize a raster for the accessibility:
+acc_time_kenya <- elevation.r
+
+# Calculate accessibility using a negative exponential function with a bandwidth of the median of the cost variable
+junk <- rowSums(exp(-ddalpha * (travel_time_KD + t(travel_time_KO))/30))
+acc_time_kenya[] <- junk
+
+# Metabolic energy
+# Initialize a raster for the accessibility:
+acc_energy_kenya <- elevation.r
+
+# Calculate accessibility using a negative exponential function with a bandwidth of the median of the cost variable and a parameter calibrated to give similar maximum accessibility as the other indicators:
+junk <- rowSums(exp(-5.6 * (travel_energy_KD + t(travel_energy_KO))/(median(travel_energy_KD))))
+acc_energy_kenya[] <- junk
+```
+
+```{r figure-accessibility-kenya, eval = FALSE, fig.width=7, fig.height=7, echo=FALSE, cache = TRUE, fig.cap="\\label{fig:figure-accessibility-kenya}Accessibility Kenya"}
+
+# Parameters for figure
+par(mfrow = c(2, 2), mar = c(2, 2, 2, 2))
+
+# Plot straight-line distance
+plot(acc_euclidean_kenya, col = rev(jet.col(255)),
+     legend.args=list(text='Number of Accessible Wells', side=2, font=2, line=0.5, cex=0.8))
+lines(Populated_Area.sp, col = "black")
+points(Destinations.sp, col = "white", pch = 17)
+
+title(main = "straight-line Distance Accessibility")
+
+# Plot surface distance
+plot(acc_distance_kenya, col = rev(jet.col(255)),
+     legend.args=list(text='Number of Accessible Wells', side=2, font=2, line=0.5, cex=0.8))
+lines(Populated_Area.sp, col = "black")
+points(Destinations.sp, col = "white", pch = 17)
+
+title(main = "Surface Distance Accessibility")
+
+# Plot time
+plot(acc_time_kenya, col = rev(jet.col(255)),
+     legend.args=list(text='Number of Accessible Wells', side=2, font=2, line=0.5, cex=0.8))
+lines(Populated_Area.sp, col = "black")
+points(Destinations.sp, col = "white", pch = 17)
+
+title(main = "Travel Time Accessibility")
+
+# Plot energy
+plot(acc_energy_kenya, col = rev(jet.col(255)),
+     legend.args=list(text='Number of Accessible Wells', side=2, font=2, line=0.5, cex=0.8))
+lines(Populated_Area.sp, col = "black")
+points(Destinations.sp, col = "white", pch = 17)
+
+title(main = "Metabolic Energy Accessibility")
+```
+
+```{r accessibility-calculations-cumulative-opportunities-kenya, include=FALSE}
+#Accessibility calculations for the empirical example
+
+# Check this document that provides useful information to select parameters: http://www.un.org/waterforlifedecade/pdf/human_right_to_water_and_sanitation_media_brief.pdf
+
+# straight-line distance
+
+# Initialize a raster for the accessibility:
+acc_euclidean_co_kenya <- elevation.r
+
+# Calculate accessibility using a negative exponential function with a bandwidth of the median of the cost variable
+junk <- rowSums(straight_line_KD <= 1000)
+acc_euclidean_co_kenya[] <- junk
+acc_euclidean_co_kenya <- as.factor(acc_euclidean_co_kenya)
+
+# Surface distance
+
+# Initialize a raster for the accessibility:
+acc_distance_co_kenya <- elevation.r
+
+# Calculate accessibility using a cumulative opportunities function with a bandwidth of the recommended distance of 1,000 m 
+junk <- rowSums(travel_distance_KD <= 1000)
+acc_distance_co_kenya[] <- junk
+acc_distance_co_kenya <- as.factor(acc_distance_co_kenya)
+
+# Travel time
+# Initialize a raster for the accessibility:
+acc_time_co_kenya <- elevation.r
+
+# Calculate accessibility using a cumulative opportunities function with a bandwidth of the recommended round-trip time of 30 min
+junk <- rowSums((travel_time_KD + t(travel_time_KO)) <= 30)
+acc_time_co_kenya[] <- junk
+acc_time_co_kenya <- as.factor(acc_time_co_kenya)
+
+# Metabolic energy
+# Initialize a raster for the accessibility:
+acc_energy_co_kenya <- elevation.r
+
+# Calculate accessibility using a cumulative opportunities function with a bandwidth equal to the energy of a similar trip that minimizes time.
+
+# Estimate a model for time as a function of energy. Then test values of energy to find the energy equivalent to a trip of 30 min.
+
+mod1 <- mgcv::gam(formula = Time ~ 0 + Energy, data = cost_kenya)
+bw <- predict(mod1, newdata = data.frame(Euclidean = 0, Surface = 0, Time = 30, Energy = 9838.99))
+
+junk <- rowSums((travel_energy_KD + t(travel_energy_KO)) <= 9838.99)
+acc_energy_co_kenya[] <- junk
+acc_energy_co_kenya <- as.factor(acc_energy_co_kenya)
+```
+
+```{r figure-accessibility-cumulative-opportunities-kenya, fig.width=7, fig.height=7, echo=FALSE, cache = TRUE, fig.cap="\\label{fig:figure-accessibility-cumulative-opportunities-kenya}Cumulative opportunities accessibility maps in empirical example using different measures of resistance (Red = 0 water sources; Orange = 1 water source; Green = 2 water sources; Light Blue = 3 water sources; Dark Blue = 4 water sources)"}
+
+# Parameters for figure
+par(mfrow = c(2, 2), mar = c(2, 2, 2, 2))
+
+# Plot straight-line distance
+plot(acc_euclidean_co_kenya, col = rev(jet.col(255)), zlim = c(0,  4))
+points(Destinations.sp, col = "red", pch = 17)
+points(Origins.sp, col = "white", pch = 3)
+
+title(main = "Straight-line Distance Accessibility")
+
+# Plot surface distance
+plot(acc_distance_co_kenya, col = rev(jet.col(255)), zlim = c(0,  4))
+points(Destinations.sp, col = "red", pch = 17)
+points(Origins.sp, col = "white", pch = 3)
+
+title(main = "Surface Distance Accessibility")
+
+# Plot time
+plot(acc_time_co_kenya, col = rev(jet.col(255)), zlim = c(0,  4))
+points(Destinations.sp, col = "red", pch = 17)
+points(Origins.sp, col = "white", pch = 3)
+
+title(main = "Travel Time Accessibility")
+
+# Plot energy
+plot(acc_energy_co_kenya, col = rev(jet.col(255)), zlim = c(0,  4))
+points(Destinations.sp, col = "red", pch = 17)
+points(Origins.sp, col = "white", pch = 3)
+
+title(main = "Metabolic Energy Accessibility")
+```
+
+```{r accessibility-summary, include=FALSE}
+# To summarize the information about accessibility, extract the accessibility values for each boma
+
+# Euclidean
+acc_summary_euclidean <- factor(raster::extract(acc_euclidean_co_kenya, Origins.sp) + 1, 
+                                levels = c(1, 2, 3, 4, 5), 
+                                labels = c("0", "1", "2", "3", "4"),
+                                ordered = TRUE)
+# Surface distance
+acc_summary_distance <- factor(raster::extract(acc_distance_co_kenya, Origins.sp) + 1, 
+                                levels = c(1, 2, 3, 4, 5), 
+                                labels = c("0", "1", "2", "3", "4"),
+                                ordered = TRUE)
+# Time
+acc_summary_time <- factor(raster::extract(acc_time_co_kenya, Origins.sp) + 1, 
+                                levels = c(1, 2, 3, 4, 5), 
+                                labels = c("0", "1", "2", "3", "4"),
+                                ordered = TRUE)
+# Energy
+acc_summary_energy <- factor(raster::extract(acc_energy_co_kenya, Origins.sp) + 1, 
+                                levels = c(1, 2, 3, 4, 5), 
+                                labels = c("0", "1", "2", "3", "4"),
+                                ordered = TRUE)
+
+# Summarize the number of bomas with different levels of accessibility
+summary_acc_kenya <- data.frame(Euclidean = summary(acc_summary_euclidean),
+                                Distance = summary(acc_summary_distance),
+                                Time = summary(acc_summary_time),
+                                Energy = summary(acc_summary_energy))[1:5,] 
+```
+
+```{r table-summary-accessibility, echo=FALSE}
+#Calculate the number of bomas in each accessibility class for each method
+
+row.names(summary_acc_kenya) <- NULL
+
+kable(data.frame(nw = c("0", "1", "2", "3", "4"),
+                        summary_acc_kenya), 
+      "latex", 
+      digits = 2, 
+      booktabs = T, 
+      align = c("l", "c", "c", "c", "c"),
+      caption = "\\label{tab:table-summary-accessibility}Summary of accessibility analysis in case study: number of bomas with different levels of accessibility to water sources by cost criteria",
+      col.names = c( "Water Sources",
+                     "Euclidean Distance", 
+                     "Surface Distance", 
+                     "Time",
+                     "Energy")) %>%
+  add_header_above(c("", "Cost Criterion" = 4))
+```
+
+Table \ref{tab:table-summary-accessibility} presents the summary of results of the accessibility analysis from the perspective of bomas. The number of bomas with zero accessibility are `r summary_acc_kenya$Euclidean[1]` according to straight line distance, `r summary_acc_kenya$Distance[1]` according to surface distance, `r summary_acc_kenya$Euclidean[1]` according to straight line distance, `r summary_acc_kenya$Time[1]` according to travel time, and `r summary_acc_kenya$Euclidean[1]` according to straight line distance, `r summary_acc_kenya$Energy[1]` according to metabolic energy. More bomas appear to have greater accessibility to water according to travel time and metabolic energy than either distance criteria.
+
+# 4.5 Discussion
+
+The empirical example illustrates how there are potentially important differences in the conclusions that would be drawn depending on which cost criterion is used in the implementation of accessibility analysis. This prompts the question: what do we measure when we measure accessibility? An implicit (and often under-examined) assumption in many treatments of accessibility concerns the kind of behavior that accessibility analysis is meant to reflect [@Paez2012positive]. As the analysis above illustrates, this might not be critical when Euclidean distance, surface distance, and travel time are used, given the similarities in outcomes between least-distance and least-time behaviors. However, when least-effort is the determining factor, the results may change substantially. This, in turn, can be expected to have an impact on policy analysis and decision-making.
+
+So, which criterion is more appropriate? The answer at this point is, we do not know for sure. Minimization of travel time may be a suitable assumption for some activities - for instance, when evacuating or fleeing danger. However, the physical exertion involved in active travel may be better represented by cost in metabolic energy - which, as our research demonstrates, leads to results that are markedly different from distance and time, the two most widely used criteria. In fact, assuming that travelers minimize distance or time may lead to travel predictions that are wholly unreflective of actual cost-minimization behavior. Another reason this may be important is sensitivity to changes in the assumptions. For example, the friction of distance is symmetric on the outward and return trips. This may not be the case for travel time and energy. Suppose for instance that speed is reduced on the return trip - perhaps due to an increase in the load, if, for example, the purpose of the trip is to fetch water. Likewise, the metabolic energy requirements would increase with the load. 
+In an infrastructure-poor context, our results show that longer, more time-consuming paths may be taken in exchange for reduced energy consumption. Such a scenario may be a valid hypothesis for water fetching in low- and middle-income countries, if for example, an individual fetching water is more concerned with metabolic pressures than time pressures. As a result, they may trade off distance and time for reduced energy expenditure in the to and from directions. Water fetching in sub-Saharan Africa broadly, and Kenya specifically, is a gendered norm that falls on women and girls and is exacerbated by pregnancy [women's reproductive role in society; @Moser1993gender]. Given the existence of multi-directional relationships between nutritional requirements, time and energy required for water fetching, and susceptibility towards domestic violence if daily household duties are not completed [@Pommells2018gender], metabolic energy may be a more important, if subconscious, choice factor in determining a water-fetching path.
+
+This is not to say that an emphasis on minimizing travel time for reaching water by entities such as the World Health Organization is misplaced, only that its use should be more explicitly recognized and critically examined relative to assumptions about different travel behavior and mobility contexts. When an individual is travelling via a motorized mode, such as driving a car or riding transit, the minimization of travel time or distance seems like a reasonable assumption - the commuter with daily time constraints on available activities within in their potential path area may indeed seek to minimize travel time to better participate in activities of value. Similarly, a firefighter may not prioritize energy expenditure over travel time or distance when escaping a wildfire [@Campbell2017]. For active travelers who face stricter capability constraints, for example due to nutrition deficiencies, poor health, age, or disabilities, minimizing the metabolic energy cost might well be a more accurate assumption about their behavior.
+
+5 Conclusions
+===================
+
+Research into accessibility makes some implicit assumptions about the travel behavior of individuals that are not always recognized. Much of the literature on accessibility specifies distance or travel time as the primary costs to be optimized and is generally carried on in what can be described as infrastructure-rich regions. Moreover, most research is conducted under an assumption of topographical or topological planarity. However, the greater availability of enhanced geographic data on the relief of terrain, as well as advances in research into the temporal and metabolic costs of travel enable a greater understanding of the link between different travel cost attributes and how individuals interact with the natural and built environments in varied contexts.
+
+In this paper, we utilized an empirical case study in rural Kenya to estimate the cost of active travel in an infrastructure-poor region. This is an example of an environment rich in topography but lacking in transportation infrastructure. Comparisons between distance, travel time, and energy expenditure revealed interesting differences in predicted travel paths. Results show that calculations of shortest-paths using Euclidean distance, distance on the 3D surface, and slope-aware travel time predicted by Tobler's Hiking Function were remarkably similar. Paths are also virtually identical in the to and from directions, with a predicted trajectory that is largely straight over the surface. In retrospect, the lack of difference between the 3D distance and travel time calculations is unsurprising, as slope and travel time are acutely linked in the specification of Tobler's function, particularly at more gentle path gradients. It may be that trips with steeper gradients or over longer distances are more sensitive to the velocity gradients in Tobler's function. When metabolic energy is used as a measure of cost, however, strikingly different results are found.
+
+Our results, in the context of infrastructure-poor regions, offer provocative implications for accessibility research more generally. At a high level, our work challenges an implicit bias in accessibility research towards the minimization of travel time or distance. This bias could be understood as an outcome of early accessibility research associated with large transportation projects, mostly for motorized travel, in high income, infrastructure-rich countries. In this context, the benefits were often framed in terms of travel time savings, particularly for cost-benefit analysis. It is not difficult to imagine travel scenarios in these regions where optimization of travel time may not be the primary concern. For example, elderly individuals engaged in active travel may behave in a way that minimizes energy expenditure over time, selecting paths that offer lower metabolic resistance and reduced risk of travel difficulty. Cyclists may also optimize route choices based on terrain, preferring network paths that are longer but minimize uphill travel. In this light, route choice algorithms implemented in consumer mobile mapping software that recommend travel choices that minimize travel time may be insensitive to the actual cost optimization behavior of their users given different mobility and environmental contexts. Although accessibility research continues to evolve, it may be that these beginnings have led to a path dependency with respect to the focus of the analytical lens on travel time and distance.
+
+In terms of future research, it is important to note that Tobler's hiking function and the metabolic cost function were calibrated for particular demographic groups. In this respect, @Looney2018metabolic discuss the need to (re)calibrate the metabolic energy functions for special population segments [also see @Looney2019metabolic and @Richmond2019terrain]. This appears as an important direction for future research. Metabolic energy in particular provides an intriguing avenue for researching the cost of movement, one that makes it possible to better understand vulnerable populations, such as older adults in urban settings, or pregnant women in rural areas who require greater nutritional intake and expend more energy per unit activity. Directions for further research include certain trade-offs between route choice variables across various applications, for example, walking and cycling route choice algorithms.
+
+Furthermore, it is possible to envision scenarios where travel choices are made while optimizing several attributes simultaneously, such as the minimization of travel time, distance, monetary cost, and/or energy expenditure, as well as the potential for maximizing other attributes like safety or interest. In these cases, better insight into the choices made by individuals relative to their activities and time and mobility constraints is required. Similarly, alternative route choice algorithms that optimize several functions would be required to exploit this information for improved predictive modelling of active travel choices and accessibility. Finally, cognition imposes its own travel costs. @Erath2017pedestrian, for example, include a factor to modify _actual_ travel time to obtain _perceived_ travel time. In addition, there might be additional time and mental costs involved in the selection of paths on familiar or unfamiliar terrain. Cognition is incorporated into an individual's estimation of travel times on the cost surface through the search algorithm, and could be incorporated in shortest paths algorithms by allowing searches to happen on higher order spatial lags, beyond adjacent cells.
+
+Finally, the discussion in this paper focused on the topographical features of terrain. It would also be interesting to examine the impact on accessibility of different land cover types, including the presence of potential barriers that must be crossed or circumvented (e.g., wetlands), or facilitators to travel (e.g., dirt trails or tracks on the terrain). This is a matter for future research.
+
+Acknowledgments
+===================
+
+This research was supported by Grant [X] to [Y] and [Z]. The following `R` packages were used in the course of this investigation and the authors wish to acknowledge their developers: `knitr` [@Xie2015; @Xie2018], `tidyverse` [@Wickham2017], `raster` [@Hijmans2018raster], `gdistance` [@vanEtten2017], `gridExtra` [@Auguie2017], `spdep` [@Bivand2013asdar], `kableExtra` [@Zhu2018], `ggthemes` [@Arnold2018], `plot3D` [@Soetaert2017], and `rticles` [@Allaire2018rticles].
+
+References {#references .unnumbered}
+==========

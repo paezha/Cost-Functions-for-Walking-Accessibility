@@ -1,5 +1,4 @@
 # Comparing distance, time, and metabolic energy cost functions for walking accessibility in infrastructure-poor regions
----
 
 Paez A, Anjum Z, Dickson-Anderson SE, Schuster-Wallace CJ, Martin B, Higgins CD (2019) Comparing distance, time, and metabolic energy cost functions for walking accessibility in infrastructure-poor regions. Paper submitted to Journal of Transport Geography.
 
